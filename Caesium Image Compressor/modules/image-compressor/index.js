@@ -270,29 +270,52 @@ function _str(buf, start, len) { return buf.subarray(start, start + len).toStrin
 
 function getImageDimensions(filePath, ext) {
     try {
-        var fd = fs.openSync(filePath, 'r');
-        var buf = Buffer.alloc(64);
-        fs.readSync(fd, buf, 0, 64, 0);
-        fs.closeSync(fd);
+        // JPEG: read entire file — SOF marker can be anywhere after variable-length
+        // EXIF/ICC/XMP headers (worst case seen: 49KB EXIF pushing SOF past byte 57000).
+        // PNG/GIF/WebP: dimensions are at fixed offsets within first 64 bytes.
+        var isJpeg = ext === 'jpg' || ext === 'jpeg';
+        var buf = isJpeg ? fs.readFileSync(filePath) : (function () {
+            var fd = fs.openSync(filePath, 'r');
+            var b = Buffer.alloc(64);
+            fs.readSync(fd, b, 0, 64, 0);
+            fs.closeSync(fd);
+            return b;
+        })();
 
         // PNG: bytes 16-19 = width (BE), bytes 20-23 = height (BE)
         if (ext === 'png' && _str(buf, 12, 4) === 'IHDR') {
             return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
         }
-        // JPEG: scan for SOF0/SOF2 marker, read dimensions from segment
+        // JPEG: scan for any SOF marker, read dimensions from segment
         if (ext === 'jpg' || ext === 'jpeg') {
             if (buf[0] === 0xFF && buf[1] === 0xD8) {
                 var pos = 2;
                 while (pos < buf.length - 9) {
                     if (buf[pos] !== 0xFF) { pos++; continue; }
                     var marker = buf[pos + 1];
-                    if (marker === 0xC0 || marker === 0xC2) {
+                    // 0xFF 0x00 = escaped FF in data, skip both bytes
+                    if (marker === 0x00) { pos += 2; continue; }
+                    // 0xFF 0xFF = padding, skip
+                    if (marker === 0xFF) { pos++; continue; }
+                    // SOF markers: 0xC0-0xC3, 0xC5-0xC7, 0xC9-0xCB, 0xCD-0xCF
+                    if ((marker >= 0xC0 && marker <= 0xC3) ||
+                        (marker >= 0xC5 && marker <= 0xC7) ||
+                        (marker >= 0xC9 && marker <= 0xCB) ||
+                        (marker >= 0xCD && marker <= 0xCF)) {
                         return {
                             height: buf.readUInt16BE(pos + 5),
                             width: buf.readUInt16BE(pos + 7)
                         };
                     }
-                    pos += 2 + buf.readUInt16BE(pos + 2);
+                    // SOS marker (0xDA) — scan data follows, stop here
+                    if (marker === 0xDA) break;
+                    // Other markers: skip segment by its length
+                    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+                        // No length field for these markers
+                        pos += 2;
+                    } else {
+                        pos += 2 + buf.readUInt16BE(pos + 2);
+                    }
                 }
             }
         }
@@ -350,24 +373,21 @@ function buildArgs(inputPath, outputDir, options, imageExt) {
     }
 
     // ---- Resize ----
-    // JPEG lossless cannot resize — skip to avoid contradictory output.
-    var isJpeg = imageExt === 'jpg' || imageExt === 'jpeg';
-    var skipResize = isLossless && isJpeg;
-
-    if (!skipResize) {
-        var resize = getResizeOptions();
-        eagle.log.info('[caesium] resize mode=' + resize.mode + ' percentW=' + resize.percentW + ' percentH=' + resize.percentH);
-        if (resize.mode !== 'original') {
-            var dims = getImageDimensions(inputPath, imageExt);
-            eagle.log.info('[caesium] image dims=' + (dims ? (dims.width+'x'+dims.height) : 'null'));
-            if (dims && dims.width > 0 && dims.height > 0) {
-                var target = calcResizeDims(dims.width, dims.height, resize);
-                if (target && (target.width !== dims.width || target.height !== dims.height)) {
-                    args.push('--width', String(target.width));
-                    args.push('--height', String(target.height));
-                    if (resize.noUpscale) {
-                        args.push('--no-upscale');
-                    }
+    // Resize takes priority over lossless: if both are set, CaesiumCLT
+    // will resize and fall back to lossy encoding. This matches the
+    // standalone GUI behavior.
+    var resize = getResizeOptions();
+    eagle.log.info('[caesium] resize mode=' + resize.mode + ' percentW=' + resize.percentW + ' percentH=' + resize.percentH);
+    if (resize.mode !== 'original') {
+        var dims = getImageDimensions(inputPath, imageExt);
+        eagle.log.info('[caesium] image dims=' + (dims ? (dims.width+'x'+dims.height) : 'null'));
+        if (dims && dims.width > 0 && dims.height > 0) {
+            var target = calcResizeDims(dims.width, dims.height, resize);
+            if (target && (target.width !== dims.width || target.height !== dims.height)) {
+                args.push('--width', String(target.width));
+                args.push('--height', String(target.height));
+                if (resize.noUpscale) {
+                    args.push('--no-upscale');
                 }
             }
         }
