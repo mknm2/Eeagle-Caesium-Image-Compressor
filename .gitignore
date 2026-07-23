@@ -22,3 +22,7 @@ node_modules/
 # Eagle plugin temp
 Caesium Image Compressor/temp/
 Caesium Image Compressor/window-state.json
+
+# Dev backups
+*.cae-backup
+*.orig
