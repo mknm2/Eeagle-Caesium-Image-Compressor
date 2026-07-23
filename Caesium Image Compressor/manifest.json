@@ -1,0 +1,21 @@
+{
+    "id": "1df3c39d-da57-497f-814d-1d48ce9bd666",
+    "version": "1.0.0",
+    "platform": "all",
+    "arch": "all",
+    "name": "{{manifest.app.name}}",
+    "logo": "./logo.png",
+    "keywords": ["compress", "image", "optimize", "caesium", "jpg", "png", "webp"],
+    "fallbackLanguage": "en",
+    "languages": ["en", "zh_TW", "zh_CN", "ja_JP", "ko_KR", "es_ES", "de_DE", "ru_RU"],
+    "main": {
+        "frame": false,
+        "vibrancy": true,
+        "url": "index.html",
+        "width": 960,
+        "height": 640,
+        "minWidth": 800,
+        "minHeight": 600,
+        "opacity": 1
+    }
+}

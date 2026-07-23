@@ -1,0 +1,90 @@
+{
+    "manifest": {
+        "app": {
+            "name": "Caesium Image Compressor"
+        }
+    },
+    "header": {
+        "thumbtack": {
+            "isAlwaysOnTop": "Pin Window",
+            "isNotAlwaysOnTop": "Unpin"
+        },
+        "dialog": {
+            "exit": {
+                "title": "Exit Plugin?",
+                "description": "Exiting will stop the task. Uncompressed images will no longer be compressed.",
+                "cancel": "Cancel",
+                "ok": "Confirm Exit"
+            }
+        }
+    },
+    "main": {
+        "table": {
+            "thead": {
+                "name": "File Name",
+                "ext": "Format",
+                "size": "Original Size",
+                "convertedSize": "Compressed Size"
+            },
+            "contextMenu": {
+                "deleteSuccessful": "Deletion Successful"
+            }
+        },
+        "empty": {
+            "title": "Add Images",
+            "content": "Please add images from Eagle before compressing. Supported formats: bmp / jpg / png / webp / avif."
+        },
+        "process": {
+            "completed": "Conversion completed. Success: {{success}}, Failure: {{failed}}. You can select other images in Eagle to continue compression."
+        },
+        "setting": {
+            "title": "Compression Settings",
+            "format": "Format",
+            "algorithm": "Algorithm",
+            "quality": "Quality",
+            "lossy": "Lossy",
+            "noLossy": "Lossless",
+            "save": "Save Settings"
+        },
+        "dialog": {
+            "success": {
+                "title": "Compression Completed!",
+                "description": "Successfully compressed <span style='color: var(--color-positive)'>{{ count }}</span> images. You can select other images in Eagle to continue compression.",
+                "cancel": "Close",
+                "ok": "Confirm"
+            }
+        }
+    },
+    "footer": {
+        "setting": {
+            "title": "Compression Settings",
+            "hint": "Click here for compression settings"
+        },
+        "convert": {
+            "isConverting": "Compressing...",
+            "title": "Compressing Images"
+        }
+    },
+    "component": {
+        "dropZone": {
+            "tip": "Drag and drop files here to add"
+        }
+    },
+    "error": {
+        "equalExtension": "File extension is the same",
+
+        "imageLoadError": "Failed to load image",
+
+        "fileExtensionNotSupported": "Unsupported image format",
+
+        "fileSizeNotSupported": "File size not supported, the maximum supported size is currently 50MB",
+        "resolutionNotSupported": "Image exceeds the maximum size limit, currently supporting a maximum pixel size of 65535",
+
+        "fileResolutionIsNotEqual": "Conversion failed, abnormal output result (ERROR_RESOLUTION)",
+        "fileSsimAbnormality": "Conversion failed, abnormal output result (ERROR_SSIM)",
+        "fileHistogramsAbnormality": "Conversion failed, abnormal output result (ERROR_HISTOGRAMS)",
+        "fileSizeAbnormality": "Conversion failed, abnormal output result (ERROR_SIZE)",
+
+        "failedToFetch": "Failed to access file"
+    }
+}

@@ -1,0 +1,90 @@
+{
+    "manifest": {
+        "app": {
+            "name": "Compresión de Imágenes con un Solo Clic"
+        }
+    },
+    "header": {
+        "thumbtack": {
+            "isAlwaysOnTop": "Mantener en la Parte Superior",
+            "isNotAlwaysOnTop": "Desactivar Mantener en la Parte Superior"
+        },
+        "dialog": {
+            "exit": {
+                "title": "¿Salir del complemento?",
+                "description": "Después de salir, la tarea se detendrá. Las imágenes que no se hayan comprimido no serán comprimidas.",
+                "cancel": "Cancelar",
+                "ok": "Confirmar Salida"
+            }
+        }
+    },
+    "main": {
+        "table": {
+            "thead": {
+                "name": "Nombre del Archivo",
+                "ext": "Formato",
+                "size": "Tamaño Original",
+                "convertedSize": "Tamaño Después de Comprimir"
+            },
+            "contextMenu": {
+                "deleteSuccessful": "Eliminación Completada"
+            }
+        },
+        "empty": {
+            "title": "Agregar Imágenes",
+            "content": "Primero, agrega imágenes desde Eagle y luego comprímelas. Compatible con bmp / jpg / png / webp / avif."
+        },
+        "process": {
+            "completed": "Conversión completada, éxitos: {{success}}, fallos: {{failed}}. Puedes seleccionar otras imágenes en Eagle para continuar comprimiendo."
+        },
+        "setting": {
+            "title": "Configuración de Compresión",
+            "format": "Formato",
+            "algorithm": "Algoritmo",
+            "quality": "Calidad",
+            "lossy": "Con Pérdida",
+            "noLossy": "Sin Pérdida",
+            "save": "Guardar Configuración"
+        },
+        "dialog": {
+            "success": {
+                "title": "¡Compresión Completada!",
+                "description": "Se ha comprimido <span style='color: var(--color-positive)'>{{ count }}</span> imágenes. Puedes seleccionar otras imágenes en Eagle para continuar comprimiendo.",
+                "cancel": "Cerrar",
+                "ok": "Confirmar"
+            }
+        }
+    },
+    "footer": {
+        "setting": {
+            "title": "Configuración de Compresión",
+            "hint": "Haz clic aquí para configurar la compresión"
+        },
+        "convert": {
+            "isConverting": "Comprimiendo...",
+            "title": "Compresión de Imágenes"
+        }
+    },
+    "component": {
+        "dropZone": {
+            "tip": "Arrastra y suelta archivos aquí para agregarlos"
+        }
+    },
+    "error": {
+        "equalExtension": "Extensión de archivo igual",
+
+        "imageLoadError": "Error al cargar la imagen",
+
+        "fileExtensionNotSupported": "Formato de imagen no compatible",
+
+        "fileSizeNotSupported": "Tamaño de archivo no compatible, el tamaño máximo admitido es de 50 MB en la actualidad",
+        "resolutionNotSupported": "Imagen fuera de los límites de tamaño máximo admitido, la resolución máxima admitida es de 65535 píxeles",
+
+        "fileResolutionIsNotEqual": "Error de conversión, resultado de salida anormal (ERROR_RESOLUTION)",
+        "fileSsimAbnormality": "Error de conversión, resultado de salida anormal (ERROR_SSIM)",
+        "fileHistogramsAbnormality": "Error de conversión, resultado de salida anormal (ERROR_HISTOGRAMS)",
+        "fileSizeAbnormality": "Error de conversión, resultado de salida anormal (ERROR_SIZE)",
+
+        "failedToFetch": "Error al acceder al archivo"
+    }
+}

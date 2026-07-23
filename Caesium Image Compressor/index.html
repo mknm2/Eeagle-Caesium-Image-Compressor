@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script type="module" crossorigin src="./assets/js/index-7aef741b.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/js/@vue-0eebc01a.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/@element-plus-297660b7.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/@ctrl-ab5a38b7.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/@vueuse-9d6fe98e.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/@popperjs-8eb851c6.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/lodash-es-950acd6f.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/element-plus-2f5bc441.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/vue-5ea21888.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/@imengyu-1dadc161.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/vue-resize-c6d6f5ba.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/vue-observe-visibility-4ca4a959.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/vue-virtual-scroller-672737a2.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/async-f695ebb2.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/vue-tippy-cb89cc53.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/mousetrap-7058277e.js">
+    <link rel="modulepreload" crossorigin href="./assets/js/vue-mousetrap-4c5eceae.js">
+    <link rel="stylesheet" href="./assets/css/element-plus-1a6f4b4a.css">
+    <link rel="stylesheet" href="./assets/css/@imengyu-d330bfc1.css">
+    <link rel="stylesheet" href="./assets/css/vue-virtual-scroller-b315b2e0.css">
+    <link rel="stylesheet" href="./assets/css/index-63c42318.css">
+    <style>
+      /* Injected settings rows — spinner-free number inputs */
+      .cae-setting-section { margin: 8px 0; }
+      .cae-setting-title { font-size: 12px; font-weight: 600; color: var(--color-text-secondary,#999); margin-bottom: 4px; }
+      .cae-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 13px; cursor: pointer; }
+      .cae-row input[type="radio"],
+      .cae-row input[type="checkbox"] { accent-color: var(--color-primary,#4a90d9); }
+      .cae-row input[type="number"]::-webkit-outer-spin-button,
+      .cae-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0; }
+      .cae-row input[type="number"] { -moz-appearance: textfield !important; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // Inject "Preserve Metadata" checkbox + "Resize" controls into the
+      // settings dialog. Uses DOM injection via MutationObserver — no changes
+      // to the Vue bundle needed.
+      (function () {
+        var PID = '1df3c39d-da57-497f-814d-1d48ce9bd666';
+        var PFX = 'eagle.plugin.' + PID + '.setting.';
+
+        // ---------- Defaults ----------
+        function ensure(key, d) { if (localStorage.getItem(key) === null) localStorage.setItem(key, d); }
+        ensure(PFX + 'preserveMetadata', 'true');
+        ensure(PFX + 'resize.mode', 'original');
+        ensure(PFX + 'resize.percentW', '50');
+        ensure(PFX + 'resize.percentH', '50');
+        ensure(PFX + 'resize.keepAspect', 'true');
+        ensure(PFX + 'resize.width', '');
+        ensure(PFX + 'resize.height', '');
+        ensure(PFX + 'resize.noUpscale', 'true');
+
+        ensure(PFX + 'exportMode', 'false');
+        ensure(PFX + 'exportPath', '');
+
+        function get(k) { return localStorage.getItem(k); }
+        function set(k, v) { localStorage.setItem(k, v); }
+
+        // ---------- Export section ----------
+        function buildExportSection() {
+          var wrap = document.createElement('div');
+          wrap.className = 'cae-setting-section';
+
+          var tt = document.createElement('div');
+          tt.className = 'cae-setting-title';
+          tt.textContent = 'Export';
+          wrap.appendChild(tt);
+
+          // Checkbox
+          var cbLabel = document.createElement('label');
+          cbLabel.className = 'cae-row';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = get(PFX + 'exportMode') === 'true';
+          cb.addEventListener('change', function () {
+            set(PFX + 'exportMode', String(this.checked));
+            pathRow.style.display = this.checked ? 'flex' : 'none';
+          });
+          cbLabel.appendChild(cb);
+          cbLabel.appendChild(document.createTextNode(' Export to folder (don\'t replace in Eagle)'));
+          wrap.appendChild(cbLabel);
+
+          // Folder path row
+          var pathRow = document.createElement('div');
+          pathRow.className = 'cae-row';
+          pathRow.style.display = cb.checked ? 'flex' : 'none';
+
+          var inp = document.createElement('input');
+          inp.type = 'text';
+          inp.style.cssText = 'flex:1;padding:2px 6px;font-size:13px;color:#e0e0e0;background:#2a2a2a;border:1px solid #555;border-radius:3px;';
+          inp.placeholder = 'Select folder...';
+          inp.value = get(PFX + 'exportPath') || '';
+          inp.addEventListener('input', function () { set(PFX + 'exportPath', this.value); });
+
+          var btn = document.createElement('button');
+          btn.textContent = 'Browse';
+          btn.style.cssText = 'padding:2px 10px;font-size:12px;cursor:pointer;';
+          btn.addEventListener('click', async function () {
+            try {
+              var result = await eagle.dialog.showOpenDialog({
+                title: 'Select Export Folder',
+                properties: ['openDirectory']
+              });
+              if (result && result.filePaths && result.filePaths[0]) {
+                inp.value = result.filePaths[0];
+                set(PFX + 'exportPath', result.filePaths[0]);
+              }
+            } catch (_) {}
+          });
+
+          pathRow.appendChild(inp);
+          pathRow.appendChild(btn);
+          wrap.appendChild(pathRow);
+          return wrap;
+        }
+
+        // ---------- Metadata checkbox ----------
+        function buildMetadataRow() {
+          var lb = document.createElement('label');
+          lb.className = 'cae-row';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = get(PFX + 'preserveMetadata') !== 'false';
+          cb.addEventListener('change', function () { set(PFX + 'preserveMetadata', String(this.checked)); });
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(' Preserve EXIF & File Dates'));
+          return lb;
+        }
+
+        // ---------- Resize section ----------
+        function buildResizeSection() {
+          var wrap = document.createElement('div');
+          wrap.className = 'cae-setting-section';
+
+          var tt = document.createElement('div');
+          tt.className = 'cae-setting-title';
+          tt.textContent = 'Resize';
+          wrap.appendChild(tt);
+
+          var mode = get(PFX + 'resize.mode');
+
+          // --- Row 1: Original Size ---
+          wrap.appendChild(_radioRow('original', 'Original Size', mode));
+
+          // --- Row 2: By Percentage ---
+          var pctRow = _radioRow('percentage', '', mode);
+          var pctRowInner = document.createElement('span');
+          pctRowInner.style.cssText = 'display:inline-flex;align-items:center;gap:4px;';
+
+          var pW = Number(get(PFX + 'resize.percentW')) || 50;
+          var pH = Number(get(PFX + 'resize.percentH')) || 50;
+
+          pctRowInner.appendChild(document.createTextNode('W: '));
+          var inpPW = _pctInput(PFX + 'resize.percentW', pW);
+          pctRowInner.appendChild(inpPW);
+          pctRowInner.appendChild(document.createTextNode('%  H: '));
+          var inpPH = _pctInput(PFX + 'resize.percentH', pH);
+          pctRowInner.appendChild(inpPH);
+          pctRowInner.appendChild(document.createTextNode('%'));
+
+          pctRow.appendChild(pctRowInner);
+
+          // Keep aspect ratio checkbox
+          var arLabel = document.createElement('label');
+          arLabel.className = 'cae-row';
+          arLabel.style.marginLeft = '22px';
+          var arCb = document.createElement('input');
+          arCb.type = 'checkbox';
+          arCb.checked = get(PFX + 'resize.keepAspect') !== 'false';
+          arCb.addEventListener('change', function () {
+            set(PFX + 'resize.keepAspect', String(this.checked));
+            if (this.checked) {
+              inpPH.value = inpPW.value;
+              set(PFX + 'resize.percentH', inpPW.value);
+            }
+          });
+          arLabel.appendChild(arCb);
+          arLabel.appendChild(document.createTextNode(' Keep aspect ratio'));
+
+          wrap.appendChild(pctRow);
+          wrap.appendChild(arLabel);
+
+          // --- Row 3: Custom Dimensions ---
+          var custRow = _radioRow('custom', '', mode);
+          var custInner = document.createElement('span');
+          custInner.style.cssText = 'display:inline-flex;align-items:center;gap:4px;';
+
+          var cW = get(PFX + 'resize.width') || '';
+          var cH = get(PFX + 'resize.height') || '';
+
+          custInner.appendChild(document.createTextNode('W: '));
+          var inpCW = _dimInput(PFX + 'resize.width', cW);
+          custInner.appendChild(inpCW);
+          custInner.appendChild(document.createTextNode(' H: '));
+          var inpCH = _dimInput(PFX + 'resize.height', cH);
+          custInner.appendChild(inpCH);
+
+          custRow.appendChild(custInner);
+          wrap.appendChild(custRow);
+
+          // --- Row 4: Do not upscale ---
+          var upLabel = document.createElement('label');
+          upLabel.className = 'cae-row';
+          upLabel.style.marginLeft = '22px';
+          var upCb = document.createElement('input');
+          upCb.type = 'checkbox';
+          upCb.checked = get(PFX + 'resize.noUpscale') !== 'false';
+          upCb.addEventListener('change', function () { set(PFX + 'resize.noUpscale', String(this.checked)); });
+          upLabel.appendChild(upCb);
+          upLabel.appendChild(document.createTextNode(' Do not upscale'));
+          wrap.appendChild(upLabel);
+
+          // Store refs for enable/disable
+          wrap._inputs = {
+            percentage: [inpPW, inpPH, arCb],
+            custom: [inpCW, inpCH]
+          };
+          _toggleResizeInputs(wrap, mode);
+
+          // --- Aspect-ratio sync ---
+          inpPW.addEventListener('input', function () {
+            if (arCb.checked) {
+              inpPH.value = this.value;
+              set(PFX + 'resize.percentH', this.value);
+            }
+          });
+          inpPH.addEventListener('input', function () {
+            if (arCb.checked) {
+              inpPW.value = this.value;
+              set(PFX + 'resize.percentW', this.value);
+            }
+          });
+
+          return wrap;
+        }
+
+        function _radioRow(value, label, currentMode) {
+          var el = document.createElement('label');
+          el.className = 'cae-row';
+          var inp = document.createElement('input');
+          inp.type = 'radio';
+          inp.name = 'cae-resize-mode';
+          inp.value = value;
+          inp.checked = currentMode === value;
+          inp.addEventListener('change', function () {
+            if (this.checked) {
+              set(PFX + 'resize.mode', value);
+              // Find the parent wrap and toggle inputs
+              var w = this.parentElement;
+              while (w && !w._inputs) w = w.parentElement;
+              if (w) _toggleResizeInputs(w, value);
+            }
+          });
+          el.appendChild(inp);
+          if (label) el.appendChild(document.createTextNode(' ' + label));
+          return el;
+        }
+
+        // Shared inline styles for number inputs (bypass CSS cascade)
+        var NUM_STYLE =
+          'width:56px;padding:2px 4px;font-size:13px;text-align:center;' +
+          'color:#e0e0e0;background:#2a2a2a;border:1px solid #555;border-radius:3px;';
+        var NUM_STYLE_WIDE = NUM_STYLE.replace('56px', '72px');
+
+        function _pctInput(key, initVal) {
+          var inp = document.createElement('input');
+          inp.type = 'number';
+          inp.min = '1';
+          inp.max = '200';
+          inp.style.cssText = NUM_STYLE;
+          if (initVal) inp.value = String(initVal);
+          inp.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+          inp.addEventListener('input', function () {
+            var v = parseInt(this.value, 10);
+            if (isNaN(v) || v < 1) { set(key, ''); return; }
+            if (v > 200) { this.value = '200'; v = 200; }
+            set(key, String(v));
+          });
+          return inp;
+        }
+
+        function _dimInput(key, initVal) {
+          var inp = document.createElement('input');
+          inp.type = 'number';
+          inp.min = '1';
+          inp.max = '65535';
+          inp.style.cssText = NUM_STYLE_WIDE;
+          inp.placeholder = 'Auto';
+          if (initVal) inp.value = String(initVal);
+          inp.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+          inp.addEventListener('input', function () {
+            var v = parseInt(this.value, 10);
+            if (isNaN(v) || v < 1) { set(key, ''); return; }
+            if (v > 65535) { this.value = '65535'; v = 65535; }
+            set(key, String(v));
+          });
+          return inp;
+        }
+
+        function _toggleResizeInputs(wrap, mode) {
+          var m = wrap._inputs;
+          // Percentage inputs
+          var pctInputs = m.percentage || [];
+          for (var i = 0; i < pctInputs.length; i++) pctInputs[i].disabled = mode !== 'percentage';
+          // Custom dimension inputs
+          var custInputs = m.custom || [];
+          for (var j = 0; j < custInputs.length; j++) custInputs[j].disabled = mode !== 'custom';
+        }
+
+        // ---------- Inject into dialog ----------
+        function inject(dialog) {
+          var saveBtn = dialog.querySelector('.save');
+          if (!saveBtn) return;
+          if (dialog.querySelector('.cae-setting-section')) return;
+          var parent = saveBtn.parentElement;
+          parent.insertBefore(buildExportSection(), saveBtn);
+          parent.insertBefore(buildResizeSection(), saveBtn);
+          parent.insertBefore(buildMetadataRow(), saveBtn);
+        }
+
+        new MutationObserver(function (mutations) {
+          for (var i = 0; i < mutations.length; i++) {
+            var added = mutations[i].addedNodes;
+            for (var j = 0; j < added.length; j++) {
+              var node = added[j];
+              if (node.nodeType === 1) {
+                if (node.classList.contains('setting-dialog-vue')) inject(node);
+                if (node.querySelectorAll) {
+                  var inner = node.querySelectorAll('.setting-dialog-vue');
+                  for (var k = 0; k < inner.length; k++) inject(inner[k]);
+                }
+              }
+            }
+          }
+        }).observe(document.body, { childList: true, subtree: true });
+      })();
+    </script>
+  </body>
+</html>

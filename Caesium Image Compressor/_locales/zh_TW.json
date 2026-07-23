@@ -1,0 +1,85 @@
+{
+    "manifest": {
+        "app": {
+            "name": "圖片一鍵壓縮"
+        }
+    },
+    "header": {
+        "thumbtack": {
+            "isAlwaysOnTop": "視窗置頂",
+            "isNotAlwaysOnTop": "取消置頂"
+        },
+        "dialog": {
+            "exit": {
+                "title": "退出插件?",
+                "description": "退出後，任務將停止。未完成壓縮的圖片將不再壓縮。",
+                "cancel": "取消",
+                "ok": "確認退出"
+            }
+        }
+    },
+    "main": {
+        "table": {
+            "thead": {
+                "name": "檔案名稱",
+                "ext": "格式",
+                "size": "原始大小",
+                "convertedSize": "壓縮後大小"
+            },
+            "contextMenu": {
+                "deleteSuccessful": "刪除已完成"
+            }
+        },
+        "empty": {
+            "title": "新增圖片",
+            "content": "請先從 Eagle 新增圖片，再進行壓縮。支援 bmp / jpg / png / webp / avif 格式。"
+        },
+        "process": {
+            "completed": "轉換完成，成功: {{success}}，失敗: {{failed}}。可在 Eagle 中選擇其他圖片繼續壓縮。"
+        },
+        "setting": {
+            "title": "壓縮設定",
+            "format": "格式",
+            "algorithm": "演算法",
+            "quality": "品質",
+            "lossy": "有損",
+            "noLossy": "無損",
+            "save": "儲存設定"
+        },
+        "dialog": {
+            "success": {
+                "title": "壓縮完成！",
+                "description": "已經壓縮 <span style='color: var(--color-positive)'>{{ count }}</span> 張圖片。你可以在 Eagle 中選取其他圖片繼續壓縮。",
+                "cancel": "關閉",
+                "ok": "確認"
+            }
+        }
+    },
+    "footer": {
+        "setting": {
+            "title": "壓縮設定",
+            "hint": "點擊這裡進行壓縮設定"
+        },
+        "convert": {
+            "isConverting": "壓縮中...",
+            "title": "壓縮圖片"
+        }
+    },
+    "component": {
+        "dropZone": {
+            "tip": "將檔案拖放至此添加"
+        }
+    },
+    "error": {
+        "equalExtension": "副檔名相同",
+        "imageLoadError": "圖片載入失敗",
+        "fileExtensionNotSupported": "不支援的圖片格式",
+        "fileSizeNotSupported": "檔案大小不支援，目前支援的最大尺寸為 50MB",
+        "resolutionNotSupported": "圖像超出最大尺寸限制，目前支援的最大像素為 65535",
+        "fileResolutionIsNotEqual": "轉換失敗，輸出結果異常(ERROR_RESOLUTION)",
+        "fileSsimAbnormality": "轉換失敗，輸出結果異常(ERROR_SSIM)",
+        "fileHistogramsAbnormality": "轉換失敗，輸出結果異常(ERROR_HISTOGRAMS)",
+        "fileSizeAbnormality": "轉換失敗，輸出結果異常(ERROR_SIZE)",
+        "failedToFetch": "檔案存取失敗"
+    }
+}

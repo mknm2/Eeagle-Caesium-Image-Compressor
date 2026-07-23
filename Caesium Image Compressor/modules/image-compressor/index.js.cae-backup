@@ -1,0 +1,330 @@
+/**
+ * CaesiumCLT Image Compressor — drop-in replacement for Eagle's official
+ * image compression module.  Uses a single CaesiumCLT binary instead of
+ * per-format tools (mozjpeg, pngquant, etc.).
+ *
+ * Interface compatible with the official plugin:
+ *   ImageCompressor.compress(src, dist, options, ext)
+ *   ImageCompressor.createTempFolder(path)
+ */
+
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawn } = require('node:child_process');
+const { createFolder } = require('../utils/file');
+const svgo = require('./lib/svgo.browser');
+
+// ---------------------------------------------------------------------------
+// Binary resolution
+// ---------------------------------------------------------------------------
+
+function getCaesiumBinary() {
+    let postfix = process.platform === 'win32' ? '.exe' : '';
+    const platform = process.platform;
+    const arch = process.arch;
+    let dir = 'win32-x64';
+    if (platform === 'darwin' && arch === 'x64')  dir = 'darwin-x64';
+    if (platform === 'darwin' && arch === 'arm64') dir = 'darwin-arm64';
+    if (platform === 'linux' && arch === 'x64')   dir = 'linux-x64';
+
+    return path.normalize(
+        `${eagle.plugin.path}/modules/image-compressor/bin/${dir}/caesiumclt${postfix}`
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Spawn helper
+// ---------------------------------------------------------------------------
+
+function spawnPromise(bin, params, timeout) {
+    return new Promise((resolve, reject) => {
+        const cmd = spawn(bin, params, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            timeout: timeout,
+            windowsHide: true,
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        cmd.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        cmd.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        cmd.on('close', (code) => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(new Error(stderr || stdout || `Exit code ${code}`));
+            }
+        });
+
+        cmd.on('error', (err) => {
+            reject(new Error(`Failed to launch caesiumclt: ${err.message}`));
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Main compressor class
+// ---------------------------------------------------------------------------
+
+module.exports = class {
+
+    /**
+     * Compress an image file using CaesiumCLT.
+     *
+     * @param {string} src     - Source image file path.
+     * @param {string} dist    - Desired output file path.
+     * @param {object} options - { algorithm, quality } from the Vue frontend.
+     *                           quality is used; algorithm is ignored.
+     * @param {string} ext     - 'jpg' | 'jpeg' | 'png' | 'webp' | 'gif' | 'svg'
+     */
+    static async compress(src, dist, options, ext) {
+        let removeInput;
+        let input = src;
+
+        // ---- Windows Chinese-path workaround (same as official plugin) ----
+        if (process.platform === 'win32') {
+            const tempPath = path.normalize(
+                os.tmpdir() + '/' + Math.random().toString(36).substr(2) + '.' + ext
+            );
+            await fs.promises.copyFile(src, tempPath);
+            input = tempPath;
+            removeInput = async () => {
+                if (process.platform === 'win32' && input !== src) {
+                    if (fs.existsSync(input)) {
+                        await fs.promises.rm(input);
+                    }
+                }
+            };
+        }
+
+        try {
+            // SVG is not supported by CaesiumCLT — keep original svgo path
+            if (ext === 'svg') {
+                await compressSVG(input, dist);
+                if (removeInput) await removeInput();
+                eagle.log.info('compressing image done (svg)');
+                return;
+            }
+
+            // ---- CaesiumCLT outputs to a directory, preserving input filename.
+            //      Use a dedicated work dir to control the final output path. ----
+            const outputDir = path.dirname(dist);
+            const workDir = path.normalize(
+                outputDir + '/caesium-work-' + Math.random().toString(36).substr(2, 6)
+            );
+            await fs.promises.mkdir(workDir, { recursive: true });
+
+            try {
+                const binPath = getCaesiumBinary();
+
+                // Ensure binary is executable on macOS/Linux
+                if (process.platform !== 'win32') {
+                    try {
+                        await fs.promises.access(binPath, fs.constants.X_OK);
+                    } catch (err) {
+                        await fs.promises.chmod(binPath, 0o755);
+                    }
+                }
+
+                const args = buildArgs(input, workDir, options, ext);
+
+                eagle.log.info('caesiumclt bin: ' + binPath);
+                eagle.log.info('caesiumclt args: ' + args.join(' '));
+                eagle.log.info('caesiumclt input: ' + input + ' outputDir: ' + workDir + ' dist: ' + dist);
+                await spawnPromise(binPath, args, 120 * 1000);
+                eagle.log.info('caesiumclt done');
+
+                // Find CaesiumCLT output and move to dist
+                const workFiles = await fs.promises.readdir(workDir);
+                if (workFiles.length === 0) {
+                    throw new Error('CaesiumCLT produced no output file');
+                }
+
+                const actualOutput = path.join(workDir, workFiles[0]);
+                if (path.normalize(actualOutput) !== path.normalize(dist)) {
+                    await fs.promises.rename(actualOutput, dist);
+                }
+            } finally {
+                try {
+                    await fs.promises.rm(workDir, { recursive: true, force: true });
+                } catch (_) { /* ignore */ }
+            }
+
+            if (removeInput) await removeInput();
+        } catch (err) {
+            if (fs.existsSync(dist)) {
+                await fs.promises.rm(dist);
+            }
+            if (removeInput) await removeInput();
+            throw err;
+        }
+
+        eagle.log.info('compressing image done');
+    }
+
+    static async createTempFolder(dirPath) {
+        await createFolder(dirPath);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// CLI argument builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine whether the selected algorithm is lossless.
+ * Maps the official plugin's algorithm names to CaesiumCLT modes:
+ *   lossless → --lossless (jpegtran, optipng, gifsicle)
+ *   lossy   → -q <quality>  (mozjpeg, pngquant, gifsicleLossy, cwebp)
+ */
+const LOSSLESS_ALGORITHMS = new Set(['jpegtran', 'optipng', 'gifsicle']);
+
+/** Read the "Preserve Metadata" checkbox setting injected by index.html. */
+function shouldPreserveMetadata() {
+    try {
+        return localStorage.getItem('eagle.plugin.1df3c39d-da57-497f-814d-1d48ce9bd666.setting.preserveMetadata') !== 'false';
+    } catch (_) { return true; }
+}
+
+/** Read resize settings injected by index.html. */
+function getResizeOptions() {
+    try {
+        var pfx = 'eagle.plugin.1df3c39d-da57-497f-814d-1d48ce9bd666.setting.resize.';
+        return {
+            mode: localStorage.getItem(pfx + 'mode') || 'original',
+            percentW: parseInt(localStorage.getItem(pfx + 'percentW'), 10) || 50,
+            percentH: parseInt(localStorage.getItem(pfx + 'percentH'), 10) || 50,
+            keepAspect: localStorage.getItem(pfx + 'keepAspect') !== 'false',
+            width: parseInt(localStorage.getItem(pfx + 'width'), 10) || 0,
+            height: parseInt(localStorage.getItem(pfx + 'height'), 10) || 0,
+            noUpscale: localStorage.getItem(pfx + 'noUpscale') !== 'false',
+        };
+    } catch (_) { return { mode: 'original', noUpscale: true }; }
+}
+
+/**
+ * Read image dimensions from common file headers.
+ * Returns { width, height } or null if unsupported.
+ */
+function getImageDimensions(filePath, ext) {
+    try {
+        var fd = fs.openSync(filePath, 'r');
+        var buf = Buffer.alloc(64);
+        fs.readSync(fd, buf, 0, 64, 0);
+        fs.closeSync(fd);
+
+        // PNG: bytes 16-19 = width (BE), bytes 20-23 = height (BE)
+        if (ext === 'png' && buf.toString('ascii', 12, 16) === 'IHDR') {
+            return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+        }
+        // JPEG: scan for SOF0/SOF2 marker, read dimensions from segment
+        if (ext === 'jpg' || ext === 'jpeg') {
+            if (buf[0] === 0xFF && buf[1] === 0xD8) {
+                var pos = 2;
+                while (pos < buf.length - 9) {
+                    if (buf[pos] !== 0xFF) { pos++; continue; }
+                    var marker = buf[pos + 1];
+                    if (marker === 0xC0 || marker === 0xC2) {
+                        return {
+                            height: buf.readUInt16BE(pos + 5),
+                            width: buf.readUInt16BE(pos + 7)
+                        };
+                    }
+                    pos += 2 + buf.readUInt16BE(pos + 2);
+                }
+            }
+        }
+        // GIF: bytes 6-7 = width (LE), bytes 8-9 = height (LE)
+        if (ext === 'gif' && buf.toString('ascii', 0, 3) === 'GIF') {
+            return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+        }
+        // WebP: RIFF container, dimensions depend on lossy/lossless sub-format
+        if (ext === 'webp' && buf.toString('ascii', 0, 4) === 'RIFF') {
+            if (buf.toString('ascii', 12, 4) === 'VP8 ') {
+                return { width: buf.readUInt16LE(26) & 0x3FFF, height: buf.readUInt16LE(28) & 0x3FFF };
+            }
+            if (buf.toString('ascii', 12, 4) === 'VP8L') {
+                var bits = buf.readUInt32LE(21);
+                return { width: (bits & 0x3FFF) + 1, height: ((bits >> 14) & 0x3FFF) + 1 };
+            }
+        }
+    } catch (_) { /* ignore */ }
+    return null;
+}
+
+/** Calculate target dimensions based on resize settings + original size. */
+function calcResizeDims(origW, origH, resize) {
+    if (resize.mode === 'percentage') {
+        var pW = Math.max(1, Math.min(200, resize.percentW)) / 100;
+        var pH = Math.max(1, Math.min(200, resize.percentH)) / 100;
+        return { width: Math.round(origW * pW), height: Math.round(origH * pH) };
+    }
+    if (resize.mode === 'custom') {
+        var w = resize.width || 0;
+        var h = resize.height || 0;
+        if (w > 0 && h > 0) return { width: w, height: h };
+        if (w > 0) return { width: w, height: Math.round(origH * w / origW) };
+        if (h > 0) return { width: Math.round(origW * h / origH), height: h };
+    }
+    return null; // original size
+}
+
+function buildArgs(inputPath, outputDir, options, imageExt) {
+    var args = [];
+
+    if (options.algorithm && LOSSLESS_ALGORITHMS.has(options.algorithm)) {
+        args.push('--lossless');
+    } else if (options.quality !== undefined && options.quality !== null) {
+        args.push('-q', String(options.quality));
+    }
+
+    // ---- Resize (before metadata flags) ----
+    var resize = getResizeOptions();
+    if (resize.mode !== 'original') {
+        var dims = getImageDimensions(inputPath, imageExt);
+        if (dims && dims.width > 0 && dims.height > 0) {
+            var target = calcResizeDims(dims.width, dims.height, resize);
+            if (target && (target.width !== dims.width || target.height !== dims.height)) {
+                args.push('--width', String(target.width));
+                args.push('--height', String(target.height));
+                if (resize.noUpscale) {
+                    args.push('--no-upscale');
+                }
+            }
+        }
+    }
+
+    // Preserve EXIF metadata and original file timestamps (opt-out via UI checkbox)
+    if (shouldPreserveMetadata()) {
+        args.push('-e');
+        args.push('--keep-dates');
+    }
+
+    args.push('-O', 'never');
+    args.push('-o', outputDir);
+    args.push(inputPath);
+
+    return args;
+}
+
+// ---------------------------------------------------------------------------
+// SVG compression (unchanged from official plugin)
+// ---------------------------------------------------------------------------
+
+async function compressSVG(src, dist) {
+    try {
+        const svgStr = await fs.promises.readFile(src, 'utf-8');
+        let compressed = svgo.optimize(svgStr, {});
+        await fs.promises.writeFile(dist, compressed.data);
+    } catch (err) {
+        throw err;
+    }
+}
