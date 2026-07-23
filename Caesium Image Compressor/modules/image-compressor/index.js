@@ -270,60 +270,68 @@ function _str(buf, start, len) { return buf.subarray(start, start + len).toStrin
 
 function getImageDimensions(filePath, ext) {
     try {
-        // JPEG: read entire file — SOF marker can be anywhere after variable-length
-        // EXIF/ICC/XMP headers (worst case seen: 49KB EXIF pushing SOF past byte 57000).
-        // PNG/GIF/WebP: dimensions are at fixed offsets within first 64 bytes.
-        var isJpeg = ext === 'jpg' || ext === 'jpeg';
-        var buf = isJpeg ? fs.readFileSync(filePath) : (function () {
-            var fd = fs.openSync(filePath, 'r');
-            var b = Buffer.alloc(64);
-            fs.readSync(fd, b, 0, 64, 0);
-            fs.closeSync(fd);
-            return b;
-        })();
-
-        // PNG: bytes 16-19 = width (BE), bytes 20-23 = height (BE)
-        if (ext === 'png' && _str(buf, 12, 4) === 'IHDR') {
-            return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
-        }
-        // JPEG: scan for any SOF marker, read dimensions from segment
+        // ---- JPEG: streaming marker-based seek parser ----
+        // Handles arbitrarily large EXIF/ICC/XMP headers without loading
+        // the entire file into memory. Example: 49KB EXIF = SOF at byte 57K+.
         if (ext === 'jpg' || ext === 'jpeg') {
-            if (buf[0] === 0xFF && buf[1] === 0xD8) {
+            var fd = fs.openSync(filePath, 'r');
+            try {
+                var hdr = Buffer.alloc(2);
+                fs.readSync(fd, hdr, 0, 2, 0);
+                if (hdr[0] !== 0xFF || hdr[1] !== 0xD8) return null;
+
                 var pos = 2;
-                while (pos < buf.length - 9) {
-                    if (buf[pos] !== 0xFF) { pos++; continue; }
-                    var marker = buf[pos + 1];
-                    // 0xFF 0x00 = escaped FF in data, skip both bytes
+                var segBuf = Buffer.alloc(16);
+
+                while (true) {
+                    var n = fs.readSync(fd, segBuf, 0, 2, pos);
+                    if (n < 2 || segBuf[0] !== 0xFF) break;
+
+                    var marker = segBuf[1];
+                    // 0xFF 0x00 = escaped FF in data, skip
                     if (marker === 0x00) { pos += 2; continue; }
-                    // 0xFF 0xFF = padding, skip
-                    if (marker === 0xFF) { pos++; continue; }
-                    // SOF markers: 0xC0-0xC3, 0xC5-0xC7, 0xC9-0xCB, 0xCD-0xCF
+                    // 0xFF 0xFF = padding
+                    if (marker === 0xFF) { pos += 1; continue; }
+
+                    // SOF markers — read 3 bytes (len+precision) + 4 bytes (h,w)
                     if ((marker >= 0xC0 && marker <= 0xC3) ||
                         (marker >= 0xC5 && marker <= 0xC7) ||
                         (marker >= 0xC9 && marker <= 0xCB) ||
                         (marker >= 0xCD && marker <= 0xCF)) {
+                        fs.readSync(fd, segBuf, 0, 7, pos + 2);
                         return {
-                            height: buf.readUInt16BE(pos + 5),
-                            width: buf.readUInt16BE(pos + 7)
+                            height: segBuf.readUInt16BE(3),
+                            width:  segBuf.readUInt16BE(5)
                         };
                     }
-                    // SOS marker (0xDA) — scan data follows, stop here
-                    if (marker === 0xDA) break;
-                    // Other markers: skip segment by its length
-                    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
-                        // No length field for these markers
-                        pos += 2;
-                    } else {
-                        pos += 2 + buf.readUInt16BE(pos + 2);
-                    }
+                    // SOS (0xDA) / EOI (0xD9) — scan data, stop
+                    if (marker === 0xDA || marker === 0xD9) break;
+                    // RST markers (0xD0-0xD7) — no length field
+                    if (marker >= 0xD0 && marker <= 0xD7) { pos += 2; continue; }
+
+                    // All other markers: read 2-byte segment length, seek past
+                    n = fs.readSync(fd, segBuf, 0, 2, pos + 2);
+                    if (n < 2) break;
+                    pos += 2 + segBuf.readUInt16BE(0);
                 }
+            } finally {
+                fs.closeSync(fd);
             }
+            return null;
         }
-        // GIF: bytes 6-7 = width (LE), bytes 8-9 = height (LE)
+
+        // ---- PNG / GIF / WebP: fast path (fixed offsets, 64 bytes) ----
+        var fd2 = fs.openSync(filePath, 'r');
+        var buf = Buffer.alloc(64);
+        fs.readSync(fd2, buf, 0, 64, 0);
+        fs.closeSync(fd2);
+
+        if (ext === 'png' && _str(buf, 12, 4) === 'IHDR') {
+            return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+        }
         if (ext === 'gif' && _str(buf, 0, 3) === 'GIF') {
             return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
         }
-        // WebP: RIFF container, dimensions depend on sub-format
         if (ext === 'webp' && _str(buf, 0, 4) === 'RIFF') {
             var chunkId = _str(buf, 12, 4);
             if (chunkId === 'VP8 ') {
@@ -334,7 +342,6 @@ function getImageDimensions(filePath, ext) {
                 return { width: (bits & 0x3FFF) + 1, height: ((bits >> 14) & 0x3FFF) + 1 };
             }
             if (chunkId === 'VP8X') {
-                // Extended WebP — canvas width/height at bytes 24-29 (24-bit LE, +1)
                 var w24 = buf.readUInt16LE(24) | (buf[26] << 16);
                 var h24 = buf.readUInt16LE(27) | (buf[29] << 16);
                 return { width: w24 + 1, height: h24 + 1 };
